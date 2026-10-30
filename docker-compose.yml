@@ -1,0 +1,39 @@
+# ==============================================================================
+# BOOKSTORE PRO - HẠ TẦNG CƠ SỞ DỮ LIỆU CHO LỚP HỌC
+# ------------------------------------------------------------------------------
+# Chỉ cần 1 lệnh duy nhất, cả lớp có một PostgreSQL giống hệt nhau:
+#     docker compose up -d
+# Kiểm tra đã chạy chưa:
+#     docker compose ps
+# Xem log:
+#     docker compose logs -f postgres
+# Xóa sạch làm lại từ đầu (mất toàn bộ dữ liệu):
+#     docker compose down -v
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookstore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bookstore
+      POSTGRES_PASSWORD: bookstore123
+      POSTGRES_DB: bookstore_db
+    ports:
+      # HOST:CONTAINER - Dùng cổng 5433 ở máy thật để tránh đụng PostgreSQL
+      # có sẵn trên máy (cổng mặc định 5432). Chuỗi kết nối trong .env
+      # vì thế cũng phải trỏ tới cổng 5433.
+      - "5433:5432"
+    volumes:
+      # Volume giúp dữ liệu KHÔNG mất khi tắt/bật lại container.
+      - bookstore_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Báo "healthy" khi PostgreSQL thực sự sẵn sàng nhận kết nối.
+      test: ["CMD-SHELL", "pg_isready -U bookstore -d bookstore_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  bookstore_pgdata:
