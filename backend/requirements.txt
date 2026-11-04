@@ -1,0 +1,16 @@
+fastapi>=0.141,<1.0
+uvicorn[standard]>=0.52
+SQLAlchemy[asyncio]>=2.0,<3.0
+psycopg[binary]>=3.3
+pydantic>=2.13,<3.0
+pydantic-settings>=2.15,<3.0
+email-validator>=2.3
+PyJWT>=2.14,<3.0
+pwdlib[argon2]>=0.3
+cryptography>=46.0
+python-multipart>=0.0.32
+
+# Tests
+pytest>=9.0
+httpx>=0.28
+aiosqlite>=0.21
