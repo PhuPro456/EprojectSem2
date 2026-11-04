@@ -1,0 +1,16 @@
+# Build context is the repository root (see docker-compose.yml), so keep the
+# image builds small and reproducible by excluding local dev artefacts.
+.git
+.gitignore
+.venv
+venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+backend/dev.db
+backend/*.log
+.env
+Resource_Demo
+k8s
+powerbi
+*.md

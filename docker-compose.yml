@@ -1,0 +1,111 @@
+# ==============================================================================
+# BOOKSTORE PRO - TOÀN BỘ HỆ THỐNG BẰNG DOCKER
+# ------------------------------------------------------------------------------
+# Một lệnh duy nhất để có đủ Database + API + Website:
+#     docker compose up -d --build
+#
+# Mở trình duyệt:
+#     Website (nginx)      http://localhost:3000
+#     API / Swagger docs   http://localhost:8000/docs
+#     PostgreSQL           localhost:5433  (user bookstore / pass bookstore123)
+#
+# Lệnh hay dùng:
+#     docker compose ps                trạng thái + health của 3 container
+#     docker compose logs -f api       xem log backend
+#     docker compose logs -f postgres  xem log database
+#     docker compose down              tắt hết, dữ liệu vẫn còn trong volume
+#     docker compose down -v           xóa sạch làm lại từ đầu (MẤT dữ liệu)
+#     docker exec -it bookstore-postgres psql -U bookstore -d bookstore_db
+#
+# Chỉ muốn chạy database trên máy (code chạy bằng `python run.py`)?
+#     docker compose up -d postgres
+# ==============================================================================
+
+name: bookstore-pro
+
+# Ba service dùng chung một bộ thông tin đăng nhập. Đổi ở đây (hoặc trong .env)
+# là cả postgres lẫn api đổi theo, không còn cảnh sửa tay hai chỗ lệch nhau.
+x-postgres-user: &postgres-user ${POSTGRES_USER:-bookstore}
+x-postgres-password: &postgres-password ${POSTGRES_PASSWORD:-bookstore123}
+x-postgres-db: &postgres-db ${POSTGRES_DB:-bookstore_db}
+
+services:
+  # ---------------------------------------------------------------- PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookstore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: *postgres-user
+      POSTGRES_PASSWORD: *postgres-password
+      POSTGRES_DB: *postgres-db
+    ports:
+      # HOST:CONTAINER - cổng 5433 ở máy thật để tránh đụng PostgreSQL có sẵn
+      # (cổng mặc định 5432). Đây cũng là cổng mà .env trỏ tới khi chạy local.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Volume giữ dữ liệu khi tắt/bật lại container.
+      - bookstore_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # "healthy" nghĩa là PostgreSQL thực sự sẵn sàng nhận kết nối,
+      # api sẽ chờ đúng tín hiệu này trước khi khởi động.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookstore} -d ${POSTGRES_DB:-bookstore_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - bookstore
+
+  # ------------------------------------------------------------------ FastAPI
+  api:
+    build:
+      # Context là THƯ MỤC GỐC của repo để image nhìn thấy cả backend/ và .dockerignore.
+      context: .
+      dockerfile: backend/Dockerfile
+    image: bookstore-pro-api:latest
+    container_name: bookstore-api
+    restart: unless-stopped
+    # Đọc SECRET_KEY, SEED_ADMIN, ADMIN_* từ file .env của bạn...
+    env_file:
+      - .env
+    # ...nhưng DATABASE_URL phải trỏ tới tên service `postgres` trong mạng nội bộ
+    # của Docker, không phải `localhost` (giá trị trong .env dành cho chạy local).
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bookstore}:${POSTGRES_PASSWORD:-bookstore123}@postgres:5432/${POSTGRES_DB:-bookstore_db}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)\""]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 25s
+    networks:
+      - bookstore
+
+  # ------------------------------------------------------- Website (nginx SPA)
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: bookstore-pro-frontend:latest
+    container_name: bookstore-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - bookstore
+
+networks:
+  bookstore:
+    driver: bridge
+
+volumes:
+  bookstore_pgdata:
